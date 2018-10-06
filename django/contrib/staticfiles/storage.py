@@ -14,7 +14,6 @@ from django.core.cache import (
 from django.core.exceptions import ImproperlyConfigured
 from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage, get_storage_class
-from django.utils.encoding import force_bytes
 from django.utils.functional import LazyObject
 
 
@@ -85,11 +84,9 @@ class HashedFilesMixin:
         # `name` is the base name to construct the new hashed filename from.
         parsed_name = urlsplit(unquote(name))
         clean_name = parsed_name.path.strip()
-        if filename:
-            filename = urlsplit(unquote(filename)).path.strip()
-        filename = filename or clean_name
-        opened = False
-        if content is None:
+        filename = (filename and urlsplit(unquote(filename)).path.strip()) or clean_name
+        opened = content is None
+        if opened:
             if not self.exists(filename):
                 raise ValueError("The file '%s' could not be found with %r." % (filename, self))
             try:
@@ -97,7 +94,6 @@ class HashedFilesMixin:
             except IOError:
                 # Handle directory paths and fragments
                 return name
-            opened = True
         try:
             file_hash = self.file_hash(clean_name, content)
         finally:
@@ -232,7 +228,7 @@ class HashedFilesMixin:
         # build a list of adjustable files
         adjustable_paths = [
             path for path in paths
-            if matches_patterns(path, self._patterns.keys())
+            if matches_patterns(path, self._patterns)
         ]
         # Do a single pass first. Post-process all files once, then repeat for
         # adjustable files.
@@ -261,7 +257,7 @@ class HashedFilesMixin:
         def path_level(name):
             return len(name.split(os.sep))
 
-        for name in sorted(paths.keys(), key=path_level, reverse=True):
+        for name in sorted(paths, key=path_level, reverse=True):
             substitutions = True
             # use the original, local file, not the copied-but-unprocessed
             # file, which might be somewhere far away, like S3
@@ -299,7 +295,7 @@ class HashedFilesMixin:
                     if hashed_file_exists:
                         self.delete(hashed_name)
                     # then save the processed result
-                    content_file = ContentFile(force_bytes(content))
+                    content_file = ContentFile(content.encode())
                     # Save intermediate file for reference
                     saved_name = self._save(hashed_name, content_file)
                     hashed_name = self.hashed_name(name, content_file)
@@ -391,7 +387,7 @@ class ManifestFilesMixin(HashedFilesMixin):
             return OrderedDict()
         try:
             stored = json.loads(content, object_pairs_hook=OrderedDict)
-        except ValueError:
+        except json.JSONDecodeError:
             pass
         else:
             version = stored.get('version')
@@ -469,7 +465,7 @@ class CachedFilesMixin(HashedFilesMixin):
             self.hashed_files = _MappingCache(default_cache)
 
     def hash_key(self, name):
-        key = hashlib.md5(force_bytes(self.clean_name(name))).hexdigest()
+        key = hashlib.md5(self.clean_name(name).encode()).hexdigest()
         return 'staticfiles:%s' % key
 
 
