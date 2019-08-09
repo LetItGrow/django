@@ -24,7 +24,7 @@ class MigrationLoader:
     but will probably follow the 1234_name.py convention.
 
     On initialization, this class will scan those directories, and open and
-    read the python files, looking for a class called Migration, which should
+    read the Python files, looking for a class called Migration, which should
     inherit from django.db.migrations.Migration. See
     django.db.migrations.migration for what that looks like.
 
@@ -206,7 +206,7 @@ class MigrationLoader:
         self.load_disk()
         # Load database data
         if self.connection is None:
-            self.applied_migrations = set()
+            self.applied_migrations = {}
         else:
             recorder = MigrationRecorder(self.connection)
             self.applied_migrations = recorder.applied_migrations()
@@ -232,9 +232,9 @@ class MigrationLoader:
             # Ensure the replacing migration is only marked as applied if all of
             # its replacement targets are.
             if all(applied_statuses):
-                self.applied_migrations.add(key)
+                self.applied_migrations[key] = migration
             else:
-                self.applied_migrations.discard(key)
+                self.applied_migrations.pop(key, None)
             # A replacing migration can be used if either all or none of its
             # replacement targets have been applied.
             if all(applied_statuses) or (not any(applied_statuses)):
